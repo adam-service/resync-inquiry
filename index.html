@@ -421,7 +421,7 @@ function updateSyncStatus(state) {
   const dot = document.getElementById('syncDot');
   const label = document.getElementById('syncLabel');
   dot.className = 'sync-dot ' + state;
-  const labels = {online:'クラウド接続中', syncing:'同期中...', offline: API_URL ? '接続エラー' : 'ローカル保存'};
+  const labels = {online:'クラウド接続OK', syncing:'同期中...', offline: API_URL ? '接続エラー' : 'ローカル保存'};
   label.textContent = labels[state] || '';
 }
 
