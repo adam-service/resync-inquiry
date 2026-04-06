@@ -3,7 +3,7 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no">
-<title>resync 問い合わせ管理</title>
+<title>ADAM 問い合わせ管理シート</title>
 <style>
 *{margin:0;padding:0;box-sizing:border-box}
 body{font-family:-apple-system,BlinkMacSystemFont,'Hiragino Sans',sans-serif;background:#f0f2f5;color:#333;-webkit-tap-highlight-color:transparent}
@@ -59,6 +59,7 @@ body{font-family:-apple-system,BlinkMacSystemFont,'Hiragino Sans',sans-serif;bac
 .card-days.danger{background:#FFEBEE;color:#C62828}
 .card-meta{display:flex;flex-wrap:wrap;gap:6px;margin-bottom:6px}
 .card-badge{font-size:11px;padding:2px 8px;border-radius:8px;font-weight:500}
+.badge-service{background:#E0F2F1;color:#00695C;font-weight:700}
 .badge-source{background:#E8EAF6;color:#283593}
 .badge-staff{background:#FFF8E1;color:#F57F17}
 .card-date{font-size:11px;color:#999}
@@ -139,7 +140,7 @@ body{font-family:-apple-system,BlinkMacSystemFont,'Hiragino Sans',sans-serif;bac
 
 <!-- Header -->
 <div class="header">
-  <h1>resync 問い合わせ管理</h1>
+  <h1>ADAM 問い合わせ管理シート</h1>
   <div class="header-right">
     <div class="sync-status">
       <span class="sync-dot offline" id="syncDot"></span>
@@ -190,6 +191,7 @@ body{font-family:-apple-system,BlinkMacSystemFont,'Hiragino Sans',sans-serif;bac
       <tr>
         <th>状態</th>
         <th>名前</th>
+        <th>サービス</th>
         <th>問い合わせ日</th>
         <th>経過</th>
         <th>担当</th>
@@ -232,6 +234,16 @@ body{font-family:-apple-system,BlinkMacSystemFont,'Hiragino Sans',sans-serif;bac
       <div class="form-group">
         <label>問い合わせ日</label>
         <input type="date" id="fDate">
+      </div>
+
+      <div class="form-group">
+        <label>サービス</label>
+        <select id="fService">
+          <option value="NOIC">NOIC</option>
+          <option value="resync">resync</option>
+          <option value="ADEN">ADEN</option>
+          <option value="ADAM">ADAM</option>
+        </select>
       </div>
 
       <div class="form-group">
@@ -308,6 +320,7 @@ let data = [];
 let currentView = 'kanban';
 
 const STAFF_MAP = {ito:'伊藤', kanno:'管野', kodaka:'小鷹', honbo:'本保'};
+const SERVICE_MAP = {NOIC:'NOIC', resync:'resync', ADEN:'ADEN', ADAM:'ADAM'};
 const SOURCE_MAP = {form:'フォーム', referral:'紹介', dm:'DM'};
 const STATUS_MAP = {new:'新規', progress:'対応中', booked:'カウンセリング予約済', done:'カウンセリング済', result:'結果'};
 const RESULT_MAP = {joined:'入会', not_joined:'未入会', considering:'検討中'};
@@ -471,6 +484,7 @@ function cardHTML(d, status) {
         <span class="card-days ${dayClass}">${dayLabel}</span>
       </div>
       <div class="card-meta">
+        ${d.service ? `<span class="card-badge badge-service">${d.service}</span>` : ''}
         <span class="card-badge badge-source">${SOURCE_MAP[d.source] || d.source}</span>
         ${d.staff ? `<span class="card-badge badge-staff">${STAFF_MAP[d.staff] || d.staff}</span>` : '<span class="card-badge" style="background:#FFEBEE;color:#C62828">担当未定</span>'}
       </div>
@@ -493,6 +507,7 @@ function renderList() {
       <tr onclick="openModal('${d.id}')" style="cursor:pointer">
         <td><span class="status-dot ${statusClass}"></span>${STATUS_MAP[d.status]}</td>
         <td><strong>${esc(d.name)}</strong></td>
+        <td>${d.service || '-'}</td>
         <td>${formatDate(d.date)}</td>
         <td><span class="card-days ${dayClass}" style="font-size:12px">${days}日</span></td>
         <td>${d.staff ? STAFF_MAP[d.staff] : '-'}</td>
@@ -517,6 +532,7 @@ function openModal(id) {
     document.getElementById('editId').value = id;
     document.getElementById('fName').value = item.name || '';
     document.getElementById('fDate').value = item.date || '';
+    document.getElementById('fService').value = item.service || 'NOIC';
     document.getElementById('fSource').value = item.source || 'form';
     document.getElementById('fStaff').value = item.staff || '';
     document.getElementById('fCounselingDate').value = item.counselingDate || '';
@@ -529,6 +545,7 @@ function openModal(id) {
     document.getElementById('editId').value = '';
     document.getElementById('fName').value = '';
     document.getElementById('fDate').value = today();
+    document.getElementById('fService').value = 'NOIC';
     document.getElementById('fSource').value = 'form';
     document.getElementById('fStaff').value = '';
     document.getElementById('fCounselingDate').value = '';
@@ -580,6 +597,7 @@ function saveInquiry() {
     id,
     name,
     date: document.getElementById('fDate').value,
+    service: document.getElementById('fService').value,
     source: document.getElementById('fSource').value,
     staff: document.getElementById('fStaff').value,
     status: getSelectedStatus(),
