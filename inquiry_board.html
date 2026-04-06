@@ -232,6 +232,16 @@ body{font-family:-apple-system,BlinkMacSystemFont,'Hiragino Sans',sans-serif;bac
       </div>
 
       <div class="form-group">
+        <label>メールアドレス</label>
+        <input type="email" id="fEmail" placeholder="例: yamada@example.com">
+      </div>
+
+      <div class="form-group">
+        <label>電話番号</label>
+        <input type="tel" id="fPhone" placeholder="例: 090-1234-5678">
+      </div>
+
+      <div class="form-group">
         <label>問い合わせ日</label>
         <input type="date" id="fDate">
       </div>
@@ -531,6 +541,8 @@ function openModal(id) {
     title.textContent = '編集: ' + item.name;
     document.getElementById('editId').value = id;
     document.getElementById('fName').value = item.name || '';
+    document.getElementById('fEmail').value = item.email || '';
+    document.getElementById('fPhone').value = item.phone || '';
     document.getElementById('fDate').value = item.date || '';
     document.getElementById('fService').value = item.service || 'NOIC';
     document.getElementById('fSource').value = item.source || 'form';
@@ -544,6 +556,8 @@ function openModal(id) {
     title.textContent = '新規問い合わせ';
     document.getElementById('editId').value = '';
     document.getElementById('fName').value = '';
+    document.getElementById('fEmail').value = '';
+    document.getElementById('fPhone').value = '';
     document.getElementById('fDate').value = today();
     document.getElementById('fService').value = 'NOIC';
     document.getElementById('fSource').value = 'form';
@@ -596,6 +610,8 @@ function saveInquiry() {
   const item = {
     id,
     name,
+    email: document.getElementById('fEmail').value.trim(),
+    phone: document.getElementById('fPhone').value.trim(),
     date: document.getElementById('fDate').value,
     service: document.getElementById('fService').value,
     source: document.getElementById('fSource').value,
