@@ -43,7 +43,7 @@ body{font-family:-apple-system,BlinkMacSystemFont,'Hiragino Sans',sans-serif;bac
 .col-new .column-header{background:#FFECEC;color:#D32F2F}
 .col-progress .column-header{background:#FFF3E0;color:#E65100}
 .col-booked .column-header{background:#E3F2FD;color:#1565C0}
-.col-done .column-header{background:#E8F5E9;color:#2E7D32}
+.col-method_booked .column-header{background:#E8F5E9;color:#2E7D32}
 .col-result .column-header{background:#F3E5F5;color:#6A1B9A}
 
 /* ===== Cards ===== */
@@ -82,7 +82,7 @@ body{font-family:-apple-system,BlinkMacSystemFont,'Hiragino Sans',sans-serif;bac
 .status-new{background:#D32F2F}
 .status-progress{background:#E65100}
 .status-booked{background:#1565C0}
-.status-done{background:#2E7D32}
+.status-method_booked{background:#2E7D32}
 .status-result{background:#6A1B9A}
 
 /* ===== Modal ===== */
@@ -163,7 +163,7 @@ body{font-family:-apple-system,BlinkMacSystemFont,'Hiragino Sans',sans-serif;bac
 <!-- Kanban View -->
 <div class="kanban-container" id="kanbanView">
   <div class="kanban-column col-new">
-    <div class="column-header"><span class="column-title">&#x1F534; 新規<span class="column-count" id="countNew">0</span></span></div>
+    <div class="column-header"><span class="column-title">&#x1F534; 問い合わせ<span class="column-count" id="countNew">0</span></span></div>
     <div class="column-cards" id="colNew"></div>
   </div>
   <div class="kanban-column col-progress">
@@ -174,9 +174,9 @@ body{font-family:-apple-system,BlinkMacSystemFont,'Hiragino Sans',sans-serif;bac
     <div class="column-header"><span class="column-title">&#x1F535; カウンセリング予約済<span class="column-count" id="countBooked">0</span></span></div>
     <div class="column-cards" id="colBooked"></div>
   </div>
-  <div class="kanban-column col-done">
-    <div class="column-header"><span class="column-title">&#x1F7E2; カウンセリング済<span class="column-count" id="countDone">0</span></span></div>
-    <div class="column-cards" id="colDone"></div>
+  <div class="kanban-column col-method_booked">
+    <div class="column-header"><span class="column-title">&#x1F7E2; メソッドプレゼン予約済<span class="column-count" id="countMethodBooked">0</span></span></div>
+    <div class="column-cards" id="colMethodBooked"></div>
   </div>
   <div class="kanban-column col-result">
     <div class="column-header"><span class="column-title">&#x1F7E3; 結果<span class="column-count" id="countResult">0</span></span></div>
@@ -197,6 +197,7 @@ body{font-family:-apple-system,BlinkMacSystemFont,'Hiragino Sans',sans-serif;bac
         <th>担当</th>
         <th>元</th>
         <th>カウンセリング日</th>
+        <th>メソプレ日</th>
         <th>結果</th>
       </tr>
     </thead>
@@ -218,10 +219,10 @@ body{font-family:-apple-system,BlinkMacSystemFont,'Hiragino Sans',sans-serif;bac
       <div class="form-group">
         <label>ステータス</label>
         <div class="status-selector" id="statusSelector">
-          <div class="status-option selected" data-status="new" onclick="selectStatus(this)">新規</div>
+          <div class="status-option selected" data-status="new" onclick="selectStatus(this)">問い合わせ</div>
           <div class="status-option" data-status="progress" onclick="selectStatus(this)">対応中</div>
           <div class="status-option" data-status="booked" onclick="selectStatus(this)">カウンセリング予約済</div>
-          <div class="status-option" data-status="done" onclick="selectStatus(this)">カウンセリング済</div>
+          <div class="status-option" data-status="method_booked" onclick="selectStatus(this)">メソッドプレゼン予約済</div>
           <div class="status-option" data-status="result" onclick="selectStatus(this)">結果</div>
         </div>
       </div>
@@ -281,6 +282,11 @@ body{font-family:-apple-system,BlinkMacSystemFont,'Hiragino Sans',sans-serif;bac
         <input type="date" id="fCounselingDate">
       </div>
 
+      <div class="form-group">
+        <label>メソッドプレゼン確定日</label>
+        <input type="date" id="fMethodDate">
+      </div>
+
       <div class="form-group" id="resultGroup" style="display:none">
         <label>入会状況</label>
         <select id="fResult">
@@ -332,13 +338,27 @@ let currentView = 'kanban';
 const STAFF_MAP = {ito:'伊藤', kanno:'管野', kodaka:'小鷹', honbo:'本保'};
 const SERVICE_MAP = {NOIC:'NOIC', resync:'resync', ADEN:'ADEN', ADAM:'ADAM'};
 const SOURCE_MAP = {form:'フォーム', referral:'紹介', dm:'DM'};
-const STATUS_MAP = {new:'新規', progress:'対応中', booked:'カウンセリング予約済', done:'カウンセリング済', result:'結果'};
+const STATUS_MAP = {new:'問い合わせ', progress:'対応中', booked:'カウンセリング予約済', method_booked:'メソッドプレゼン予約済', result:'結果'};
 const RESULT_MAP = {joined:'入会', not_joined:'未入会', considering:'検討中'};
 
 // ===== Init =====
 document.addEventListener('DOMContentLoaded', () => {
   document.getElementById('fDate').value = today();
   loadData();
+  // モーダルが閉じている間は30秒おきにバックグラウンド再同期。
+  // 別端末で更新された最新データを反映し、ステータス変更時の上書き事故を防ぐ。
+  setInterval(() => {
+    const modalOpen = document.getElementById('modalOverlay').classList.contains('open');
+    if (modalOpen || !API_URL || document.hidden) return;
+    syncFromCloud({silent: true});
+  }, 30000);
+  // タブを再表示したタイミングでも即座に再同期
+  document.addEventListener('visibilitychange', () => {
+    const modalOpen = document.getElementById('modalOverlay').classList.contains('open');
+    if (!document.hidden && API_URL && !modalOpen) {
+      syncFromCloud({silent: true});
+    }
+  });
 });
 
 function today() {
@@ -368,25 +388,34 @@ function saveLocal() {
   localStorage.setItem(STORAGE_KEY, JSON.stringify(data));
 }
 
-async function syncFromCloud() {
-  updateSyncStatus('syncing');
+async function syncFromCloud(opts = {}) {
+  // opts.silent: trueなら同期インジケータを表示せず、失敗時もローカルを上書きしない（バックグラウンド更新用）
+  // opts.skipRender: trueならrender()をスキップ（モーダル表示中の再描画抑制）
+  const silent = !!opts.silent;
+  const skipRender = !!opts.skipRender;
+  if (!silent) updateSyncStatus('syncing');
   try {
     const res = await fetch(API_URL + '?action=getAll');
     const json = await res.json();
     if (json.success) {
       data = json.data || [];
       saveLocal();
-      updateSyncStatus('online');
+      if (!silent) updateSyncStatus('online');
     } else {
       throw new Error(json.error);
     }
   } catch (e) {
     console.error('Sync error:', e);
-    const stored = localStorage.getItem(STORAGE_KEY);
-    data = stored ? JSON.parse(stored) : [];
-    updateSyncStatus('offline');
+    if (!silent) {
+      const stored = localStorage.getItem(STORAGE_KEY);
+      data = stored ? JSON.parse(stored) : [];
+      updateSyncStatus('offline');
+    }
+    // silentモードでは失敗してもローカルdataは触らない
+    return false;
   }
-  render();
+  if (!skipRender) render();
+  return true;
 }
 
 async function saveToCloud(item, action = 'save') {
@@ -415,7 +444,7 @@ function updateSyncStatus(state) {
   const dot = document.getElementById('syncDot');
   const label = document.getElementById('syncLabel');
   dot.className = 'sync-dot ' + state;
-  const labels = {online:'クラウド接続中', syncing:'同期中...', offline: API_URL ? '接続エラー' : 'ローカル保存'};
+  const labels = {online:'クラウド接続OK', syncing:'同期中...', offline: API_URL ? '接続エラー' : 'ローカル保存'};
   label.textContent = labels[state] || '';
 }
 
@@ -427,7 +456,7 @@ function render() {
 }
 
 function renderStats() {
-  const counts = {new:0, progress:0, booked:0, done:0, result:0};
+  const counts = {new:0, progress:0, booked:0, method_booked:0, result:0};
   let alertCount = 0;
   data.forEach(d => {
     counts[d.status] = (counts[d.status] || 0) + 1;
@@ -435,17 +464,17 @@ function renderStats() {
   });
   const bar = document.getElementById('statsBar');
   bar.innerHTML = `
-    <div class="stat-chip" style="background:#FFECEC;color:#D32F2F"><span class="num">${counts.new}</span> 新規</div>
+    <div class="stat-chip" style="background:#FFECEC;color:#D32F2F"><span class="num">${counts.new}</span> 問い合わせ</div>
     <div class="stat-chip" style="background:#FFF3E0;color:#E65100"><span class="num">${counts.progress}</span> 対応中</div>
-    <div class="stat-chip" style="background:#E3F2FD;color:#1565C0"><span class="num">${counts.booked}</span> 予約済</div>
-    <div class="stat-chip" style="background:#E8F5E9;color:#2E7D32"><span class="num">${counts.done}</span> 済</div>
+    <div class="stat-chip" style="background:#E3F2FD;color:#1565C0"><span class="num">${counts.booked}</span> カウンセリング予約済</div>
+    <div class="stat-chip" style="background:#E8F5E9;color:#2E7D32"><span class="num">${counts.method_booked}</span> メソプレ予約済</div>
     <div class="stat-chip" style="background:#F3E5F5;color:#6A1B9A"><span class="num">${counts.result}</span> 結果</div>
     ${alertCount > 0 ? `<div class="stat-chip" style="background:#FFCDD2;color:#B71C1C"><span class="num">${alertCount}</span> 要対応!</div>` : ''}
   `;
 }
 
 function renderKanban() {
-  const cols = {new:[], progress:[], booked:[], done:[], result:[]};
+  const cols = {new:[], progress:[], booked:[], method_booked:[], result:[]};
   data.forEach(d => { if (cols[d.status]) cols[d.status].push(d); });
 
   // Sort: alert items first, then by date
@@ -458,8 +487,8 @@ function renderKanban() {
     });
   });
 
-  const colMap = {new:'colNew', progress:'colProgress', booked:'colBooked', done:'colDone', result:'colResult'};
-  const countMap = {new:'countNew', progress:'countProgress', booked:'countBooked', done:'countDone', result:'countResult'};
+  const colMap = {new:'colNew', progress:'colProgress', booked:'colBooked', method_booked:'colMethodBooked', result:'colResult'};
+  const countMap = {new:'countNew', progress:'countProgress', booked:'countBooked', method_booked:'countMethodBooked', result:'countResult'};
 
   Object.keys(cols).forEach(status => {
     const container = document.getElementById(colMap[status]);
@@ -481,6 +510,9 @@ function cardHTML(d, status) {
   let extra = '';
   if (d.counselingDate) {
     extra += `<div class="card-counseling">カウンセリング: ${formatDate(d.counselingDate)}</div>`;
+  }
+  if (d.methodDate) {
+    extra += `<div class="card-counseling">メソプレ: ${formatDate(d.methodDate)}</div>`;
   }
   if (d.result) {
     const rc = d.result === 'joined' ? 'result-joined' : d.result === 'not_joined' ? 'result-not-joined' : 'result-considering';
@@ -523,6 +555,7 @@ function renderList() {
         <td>${d.staff ? STAFF_MAP[d.staff] : '-'}</td>
         <td>${SOURCE_MAP[d.source] || '-'}</td>
         <td>${d.counselingDate ? formatDate(d.counselingDate) : '-'}</td>
+        <td>${d.methodDate ? formatDate(d.methodDate) : '-'}</td>
         <td>${resultStr || '-'}</td>
       </tr>
     `;
@@ -530,14 +563,25 @@ function renderList() {
 }
 
 // ===== Modal =====
-function openModal(id) {
+async function openModal(id) {
   const overlay = document.getElementById('modalOverlay');
   const title = document.getElementById('modalTitle');
   const btnDel = document.getElementById('btnDelete');
 
   if (id) {
+    // 既存データ編集時は、クラウドから最新を取り直してからフォームを埋める。
+    // これでローカルキャッシュが古い場合でも、最新のメモ・カウンセリング確定日がモーダルに表示される。
+    // モーダルを開いてから保存するまでの間に他端末で更新されても、ここで取得した最新データを上書きしないよう、
+    // 取得直後にフォームへ反映する。
+    if (API_URL) {
+      await syncFromCloud({skipRender: true});
+    }
     const item = data.find(d => d.id === id);
-    if (!item) return;
+    if (!item) {
+      alert('対象の問い合わせが見つかりませんでした。一覧を更新してください。');
+      render();
+      return;
+    }
     title.textContent = '編集: ' + item.name;
     document.getElementById('editId').value = id;
     document.getElementById('fName').value = item.name || '';
@@ -548,6 +592,7 @@ function openModal(id) {
     document.getElementById('fSource').value = item.source || 'form';
     document.getElementById('fStaff').value = item.staff || '';
     document.getElementById('fCounselingDate').value = item.counselingDate || '';
+    document.getElementById('fMethodDate').value = item.methodDate || '';
     document.getElementById('fResult').value = item.result || '';
     document.getElementById('fMemo').value = item.memo || '';
     selectStatusByValue(item.status || 'new');
@@ -563,6 +608,7 @@ function openModal(id) {
     document.getElementById('fSource').value = 'form';
     document.getElementById('fStaff').value = '';
     document.getElementById('fCounselingDate').value = '';
+    document.getElementById('fMethodDate').value = '';
     document.getElementById('fResult').value = '';
     document.getElementById('fMemo').value = '';
     selectStatusByValue('new');
@@ -599,7 +645,7 @@ function getSelectedStatus() {
 
 function toggleResultGroup() {
   const status = getSelectedStatus();
-  document.getElementById('resultGroup').style.display = (status === 'done' || status === 'result') ? 'block' : 'none';
+  document.getElementById('resultGroup').style.display = (status === 'method_booked' || status === 'result') ? 'block' : 'none';
 }
 
 function saveInquiry() {
@@ -607,6 +653,7 @@ function saveInquiry() {
   if (!name) { alert('お名前を入力してください'); return; }
 
   const id = document.getElementById('editId').value || genId();
+  const existing = data.find(d => d.id === id);
   const item = {
     id,
     name,
@@ -618,8 +665,10 @@ function saveInquiry() {
     staff: document.getElementById('fStaff').value,
     status: getSelectedStatus(),
     counselingDate: document.getElementById('fCounselingDate').value,
+    methodDate: document.getElementById('fMethodDate').value,
     result: document.getElementById('fResult').value,
     memo: document.getElementById('fMemo').value.trim(),
+    createdAt: (existing && existing.createdAt) ? existing.createdAt : new Date().toISOString(),
     updatedAt: new Date().toISOString()
   };
 
@@ -627,7 +676,6 @@ function saveInquiry() {
   if (idx >= 0) {
     data[idx] = item;
   } else {
-    item.createdAt = new Date().toISOString();
     data.push(item);
   }
 
