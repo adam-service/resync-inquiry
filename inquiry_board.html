@@ -40,11 +40,13 @@ body{font-family:-apple-system,BlinkMacSystemFont,'Hiragino Sans',sans-serif;bac
 .column-cards{padding:8px 12px;overflow-y:auto;flex:1;display:flex;flex-direction:column;gap:8px}
 
 /* Column Colors */
-.col-new .column-header{background:#FFECEC;color:#D32F2F}
+.col-new .column-header{background:#ECEFF1;color:#455A64}
 .col-progress .column-header{background:#FFF3E0;color:#E65100}
 .col-booked .column-header{background:#E3F2FD;color:#1565C0}
 .col-method_booked .column-header{background:#E8F5E9;color:#2E7D32}
-.col-result .column-header{background:#F3E5F5;color:#6A1B9A}
+.col-joined .column-header{background:#C8E6C9;color:#1B5E20}
+.col-not_joined .column-header{background:#FFCDD2;color:#B71C1C}
+.col-considering .column-header{background:#FFF9C4;color:#F57F17}
 
 /* ===== Cards ===== */
 .card{background:#fff;border-radius:10px;padding:14px;box-shadow:0 1px 3px rgba(0,0,0,.08);cursor:pointer;transition:box-shadow .15s;border-left:4px solid transparent}
@@ -79,10 +81,13 @@ body{font-family:-apple-system,BlinkMacSystemFont,'Hiragino Sans',sans-serif;bac
 .list-table tr:last-child td{border-bottom:none}
 .list-table tr:hover{background:#f9fafc}
 .list-table .status-dot{width:10px;height:10px;border-radius:50%;display:inline-block;margin-right:6px}
-.status-new{background:#D32F2F}
+.status-new{background:#90A4AE}
 .status-progress{background:#E65100}
 .status-booked{background:#1565C0}
 .status-method_booked{background:#2E7D32}
+.status-joined{background:#1B5E20}
+.status-not_joined{background:#B71C1C}
+.status-considering{background:#F57F17}
 .status-result{background:#6A1B9A}
 
 /* ===== Modal ===== */
@@ -163,7 +168,7 @@ body{font-family:-apple-system,BlinkMacSystemFont,'Hiragino Sans',sans-serif;bac
 <!-- Kanban View -->
 <div class="kanban-container" id="kanbanView">
   <div class="kanban-column col-new">
-    <div class="column-header"><span class="column-title">&#x1F534; 問い合わせ<span class="column-count" id="countNew">0</span></span></div>
+    <div class="column-header"><span class="column-title">&#x23F8; 保留<span class="column-count" id="countNew">0</span></span></div>
     <div class="column-cards" id="colNew"></div>
   </div>
   <div class="kanban-column col-progress">
@@ -178,9 +183,17 @@ body{font-family:-apple-system,BlinkMacSystemFont,'Hiragino Sans',sans-serif;bac
     <div class="column-header"><span class="column-title">&#x1F7E2; メソッドプレゼン予約済<span class="column-count" id="countMethodBooked">0</span></span></div>
     <div class="column-cards" id="colMethodBooked"></div>
   </div>
-  <div class="kanban-column col-result">
-    <div class="column-header"><span class="column-title">&#x1F7E3; 結果<span class="column-count" id="countResult">0</span></span></div>
-    <div class="column-cards" id="colResult"></div>
+  <div class="kanban-column col-joined">
+    <div class="column-header"><span class="column-title">&#x2705; 入会<span class="column-count" id="countJoined">0</span></span></div>
+    <div class="column-cards" id="colJoined"></div>
+  </div>
+  <div class="kanban-column col-not_joined">
+    <div class="column-header"><span class="column-title">&#x274C; 未入会<span class="column-count" id="countNotJoined">0</span></span></div>
+    <div class="column-cards" id="colNotJoined"></div>
+  </div>
+  <div class="kanban-column col-considering">
+    <div class="column-header"><span class="column-title">&#x1F914; 検討中<span class="column-count" id="countConsidering">0</span></span></div>
+    <div class="column-cards" id="colConsidering"></div>
   </div>
 </div>
 
@@ -219,11 +232,13 @@ body{font-family:-apple-system,BlinkMacSystemFont,'Hiragino Sans',sans-serif;bac
       <div class="form-group">
         <label>ステータス</label>
         <div class="status-selector" id="statusSelector">
-          <div class="status-option selected" data-status="new" onclick="selectStatus(this)">問い合わせ</div>
+          <div class="status-option selected" data-status="new" onclick="selectStatus(this)">保留</div>
           <div class="status-option" data-status="progress" onclick="selectStatus(this)">対応中</div>
           <div class="status-option" data-status="booked" onclick="selectStatus(this)">カウンセリング予約済</div>
           <div class="status-option" data-status="method_booked" onclick="selectStatus(this)">メソッドプレゼン予約済</div>
-          <div class="status-option" data-status="result" onclick="selectStatus(this)">結果</div>
+          <div class="status-option" data-status="joined" onclick="selectStatus(this)">入会</div>
+          <div class="status-option" data-status="not_joined" onclick="selectStatus(this)">未入会</div>
+          <div class="status-option" data-status="considering" onclick="selectStatus(this)">検討中</div>
         </div>
       </div>
 
@@ -287,15 +302,8 @@ body{font-family:-apple-system,BlinkMacSystemFont,'Hiragino Sans',sans-serif;bac
         <input type="date" id="fMethodDate">
       </div>
 
-      <div class="form-group" id="resultGroup" style="display:none">
-        <label>入会状況</label>
-        <select id="fResult">
-          <option value="">未定</option>
-          <option value="joined">入会</option>
-          <option value="not_joined">未入会</option>
-          <option value="considering">検討中</option>
-        </select>
-      </div>
+      <!-- 旧「入会状況」フィールドは status に統合済み。既存データの result 値は保存時に status と同期する。 -->
+      <input type="hidden" id="fResult">
 
       <div class="form-group">
         <label>メモ</label>
@@ -338,8 +346,27 @@ let currentView = 'kanban';
 const STAFF_MAP = {ito:'伊藤', kanno:'管野', kodaka:'小鷹', honbo:'本保'};
 const SERVICE_MAP = {NOIC:'NOIC', resync:'resync', ADEN:'ADEN', ADAM:'ADAM'};
 const SOURCE_MAP = {form:'フォーム', referral:'紹介', dm:'DM'};
-const STATUS_MAP = {new:'問い合わせ', progress:'対応中', booked:'カウンセリング予約済', method_booked:'メソッドプレゼン予約済', result:'結果'};
+const STATUS_MAP = {
+  new:'保留',
+  progress:'対応中',
+  booked:'カウンセリング予約済',
+  method_booked:'メソッドプレゼン予約済',
+  joined:'入会',
+  not_joined:'未入会',
+  considering:'検討中',
+  result:'結果' // 旧データ用（後方互換）
+};
 const RESULT_MAP = {joined:'入会', not_joined:'未入会', considering:'検討中'};
+
+// 旧 status='result' を新ステータスに振り分けるヘルパー（既存データを書き換えずに表示時のみ）
+function effectiveStatus(d) {
+  if (d.status === 'result') {
+    return d.result === 'joined' ? 'joined' :
+           d.result === 'not_joined' ? 'not_joined' :
+           'considering';
+  }
+  return d.status;
+}
 
 // ===== Init =====
 document.addEventListener('DOMContentLoaded', () => {
@@ -456,39 +483,46 @@ function render() {
 }
 
 function renderStats() {
-  const counts = {new:0, progress:0, booked:0, method_booked:0, result:0};
+  const counts = {new:0, progress:0, booked:0, method_booked:0, joined:0, not_joined:0, considering:0};
   let alertCount = 0;
   data.forEach(d => {
-    counts[d.status] = (counts[d.status] || 0) + 1;
-    if ((d.status === 'new' || d.status === 'progress') && daysSince(d.date) >= 3) alertCount++;
+    const s = effectiveStatus(d);
+    counts[s] = (counts[s] || 0) + 1;
+    if ((s === 'progress') && daysSince(d.date) >= 3) alertCount++;
   });
   const bar = document.getElementById('statsBar');
   bar.innerHTML = `
-    <div class="stat-chip" style="background:#FFECEC;color:#D32F2F"><span class="num">${counts.new}</span> 問い合わせ</div>
+    <div class="stat-chip" style="background:#ECEFF1;color:#455A64"><span class="num">${counts.new}</span> 保留</div>
     <div class="stat-chip" style="background:#FFF3E0;color:#E65100"><span class="num">${counts.progress}</span> 対応中</div>
     <div class="stat-chip" style="background:#E3F2FD;color:#1565C0"><span class="num">${counts.booked}</span> カウンセリング予約済</div>
     <div class="stat-chip" style="background:#E8F5E9;color:#2E7D32"><span class="num">${counts.method_booked}</span> メソプレ予約済</div>
-    <div class="stat-chip" style="background:#F3E5F5;color:#6A1B9A"><span class="num">${counts.result}</span> 結果</div>
+    <div class="stat-chip" style="background:#C8E6C9;color:#1B5E20"><span class="num">${counts.joined}</span> 入会</div>
+    <div class="stat-chip" style="background:#FFCDD2;color:#B71C1C"><span class="num">${counts.not_joined}</span> 未入会</div>
+    <div class="stat-chip" style="background:#FFF9C4;color:#F57F17"><span class="num">${counts.considering}</span> 検討中</div>
     ${alertCount > 0 ? `<div class="stat-chip" style="background:#FFCDD2;color:#B71C1C"><span class="num">${alertCount}</span> 要対応!</div>` : ''}
   `;
 }
 
 function renderKanban() {
-  const cols = {new:[], progress:[], booked:[], method_booked:[], result:[]};
-  data.forEach(d => { if (cols[d.status]) cols[d.status].push(d); });
+  const cols = {new:[], progress:[], booked:[], method_booked:[], joined:[], not_joined:[], considering:[]};
+  // 旧 status='result' の既存データは effectiveStatus で適切な新カラムへ振り分け
+  data.forEach(d => {
+    const s = effectiveStatus(d);
+    if (cols[s]) cols[s].push(d);
+  });
 
-  // Sort: alert items first, then by date
+  // Sort: alert items first (only 対応中), then by date
   Object.keys(cols).forEach(k => {
     cols[k].sort((a, b) => {
-      const aAlert = (k === 'new' || k === 'progress') && daysSince(a.date) >= 3;
-      const bAlert = (k === 'new' || k === 'progress') && daysSince(b.date) >= 3;
+      const aAlert = k === 'progress' && daysSince(a.date) >= 3;
+      const bAlert = k === 'progress' && daysSince(b.date) >= 3;
       if (aAlert !== bAlert) return bAlert - aAlert;
       return new Date(b.date || 0) - new Date(a.date || 0);
     });
   });
 
-  const colMap = {new:'colNew', progress:'colProgress', booked:'colBooked', method_booked:'colMethodBooked', result:'colResult'};
-  const countMap = {new:'countNew', progress:'countProgress', booked:'countBooked', method_booked:'countMethodBooked', result:'countResult'};
+  const colMap = {new:'colNew', progress:'colProgress', booked:'colBooked', method_booked:'colMethodBooked', joined:'colJoined', not_joined:'colNotJoined', considering:'colConsidering'};
+  const countMap = {new:'countNew', progress:'countProgress', booked:'countBooked', method_booked:'countMethodBooked', joined:'countJoined', not_joined:'countNotJoined', considering:'countConsidering'};
 
   Object.keys(cols).forEach(status => {
     const container = document.getElementById(colMap[status]);
@@ -503,7 +537,8 @@ function renderKanban() {
 
 function cardHTML(d, status) {
   const days = daysSince(d.date);
-  const isAlert = (status === 'new' || status === 'progress') && days >= 3;
+  // 対応中だけアラート対象（保留・予約済・結果系はアラートしない）
+  const isAlert = status === 'progress' && days >= 3;
   const dayClass = days >= 5 ? 'danger' : days >= 3 ? 'warn' : 'safe';
   const dayLabel = days === 0 ? '今日' : `${days}日`;
 
@@ -514,7 +549,8 @@ function cardHTML(d, status) {
   if (d.methodDate) {
     extra += `<div class="card-counseling">メソプレ: ${formatDate(d.methodDate)}</div>`;
   }
-  if (d.result) {
+  // 入会/未入会/検討中ステータスはカラム自体で表現するためバッジは不要。旧 status='result' のときだけ後方互換でバッジ表示。
+  if (d.status === 'result' && d.result) {
     const rc = d.result === 'joined' ? 'result-joined' : d.result === 'not_joined' ? 'result-not-joined' : 'result-considering';
     extra += `<span class="card-result-badge ${rc}">${RESULT_MAP[d.result]}</span>`;
   }
@@ -543,11 +579,16 @@ function renderList() {
   tbody.innerHTML = sorted.map(d => {
     const days = daysSince(d.date);
     const dayClass = days >= 5 ? 'danger' : days >= 3 ? 'warn' : 'safe';
-    const statusClass = 'status-' + d.status;
-    let resultStr = d.result ? RESULT_MAP[d.result] : '';
+    const eff = effectiveStatus(d);
+    const statusClass = 'status-' + eff;
+    // 結果列は新ステータス（入会/未入会/検討中）またはレガシー result から表示
+    let resultStr = '';
+    if (eff === 'joined' || eff === 'not_joined' || eff === 'considering') {
+      resultStr = STATUS_MAP[eff];
+    }
     return `
       <tr onclick="openModal('${d.id}')" style="cursor:pointer">
-        <td><span class="status-dot ${statusClass}"></span>${STATUS_MAP[d.status]}</td>
+        <td><span class="status-dot ${statusClass}"></span>${STATUS_MAP[eff] || STATUS_MAP[d.status] || ''}</td>
         <td><strong>${esc(d.name)}</strong></td>
         <td>${d.service || '-'}</td>
         <td>${formatDate(d.date)}</td>
@@ -595,7 +636,8 @@ async function openModal(id) {
     document.getElementById('fMethodDate').value = item.methodDate || '';
     document.getElementById('fResult').value = item.result || '';
     document.getElementById('fMemo').value = item.memo || '';
-    selectStatusByValue(item.status || 'new');
+    // 旧 status='result' のデータは、新ステータス（入会/未入会/検討中）に自動マップしてフォーム表示
+    selectStatusByValue(effectiveStatus(item) || 'new');
     btnDel.style.display = 'block';
   } else {
     title.textContent = '新規問い合わせ';
@@ -644,8 +686,7 @@ function getSelectedStatus() {
 }
 
 function toggleResultGroup() {
-  const status = getSelectedStatus();
-  document.getElementById('resultGroup').style.display = (status === 'method_booked' || status === 'result') ? 'block' : 'none';
+  // 旧「入会状況」フィールドは status に統合されたため、表示制御は不要（hidden inputとして残置）
 }
 
 function saveInquiry() {
@@ -654,6 +695,11 @@ function saveInquiry() {
 
   const id = document.getElementById('editId').value || genId();
   const existing = data.find(d => d.id === id);
+  const newStatus = getSelectedStatus();
+  // 入会/未入会/検討中ステータスのときは、後方互換のため result 列も同じ値で同期する
+  // それ以外のステータス（保留・対応中・予約済）は既存の result 値を維持（消さない）
+  const isResultStatus = (newStatus === 'joined' || newStatus === 'not_joined' || newStatus === 'considering');
+  const resultValue = isResultStatus ? newStatus : (existing && existing.result ? existing.result : '');
   const item = {
     id,
     name,
@@ -663,10 +709,10 @@ function saveInquiry() {
     service: document.getElementById('fService').value,
     source: document.getElementById('fSource').value,
     staff: document.getElementById('fStaff').value,
-    status: getSelectedStatus(),
+    status: newStatus,
     counselingDate: document.getElementById('fCounselingDate').value,
     methodDate: document.getElementById('fMethodDate').value,
-    result: document.getElementById('fResult').value,
+    result: resultValue,
     memo: document.getElementById('fMemo').value.trim(),
     createdAt: (existing && existing.createdAt) ? existing.createdAt : new Date().toISOString(),
     updatedAt: new Date().toISOString()
