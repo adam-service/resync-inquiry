@@ -219,7 +219,7 @@ body{font-family:-apple-system,BlinkMacSystemFont,'Hiragino Sans',sans-serif;bac
 </div>
 
 <!-- Modal (New / Edit) -->
-<div class="modal-overlay" id="modalOverlay" onclick="closeModalOutside(event)">
+<div class="modal-overlay" id="modalOverlay">
   <div class="modal">
     <div class="modal-handle"></div>
     <div class="modal-header">
@@ -687,8 +687,49 @@ function closeModal() {
   document.getElementById('modalOverlay').classList.remove('open');
 }
 
+// オーバーレイ外側タップで閉じる挙動。
+// スワイプ（横スクロールジェスチャ）でも click イベントが発火してしまい、誤って閉じる事故があったので、
+// 「押した位置」「離した位置」が両方オーバーレイで、かつ移動量が小さいときだけ閉じる方式に変更。
+(function setupModalDismiss() {
+  const overlay = document.getElementById('modalOverlay');
+  if (!overlay) return;
+  let downOnOverlay = false;
+  let startX = 0, startY = 0, moved = false;
+  const SWIPE_THRESHOLD = 10;
+
+  const onDown = (e) => {
+    const t = e.touches ? e.touches[0] : e;
+    downOnOverlay = (e.target === overlay);
+    startX = t.clientX;
+    startY = t.clientY;
+    moved = false;
+  };
+  const onMove = (e) => {
+    if (!downOnOverlay) return;
+    const t = e.touches ? e.touches[0] : e;
+    if (Math.abs(t.clientX - startX) > SWIPE_THRESHOLD || Math.abs(t.clientY - startY) > SWIPE_THRESHOLD) {
+      moved = true;
+    }
+  };
+  const onUp = (e) => {
+    if (downOnOverlay && !moved && e.target === overlay) {
+      closeModal();
+    }
+    downOnOverlay = false;
+    moved = false;
+  };
+
+  overlay.addEventListener('mousedown', onDown);
+  overlay.addEventListener('mousemove', onMove);
+  overlay.addEventListener('mouseup', onUp);
+  overlay.addEventListener('touchstart', onDown, {passive: true});
+  overlay.addEventListener('touchmove', onMove, {passive: true});
+  overlay.addEventListener('touchend', onUp);
+})();
+
 function closeModalOutside(e) {
-  if (e.target === e.currentTarget) closeModal();
+  // 後方互換のため残置（直接呼び出されないが、削除すると古いキャッシュで参照エラーになるため）
+  if (e && e.target === e.currentTarget) closeModal();
 }
 
 function selectStatus(el) {
