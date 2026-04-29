@@ -401,11 +401,15 @@ function daysSince(dateStr) {
 
 // ===== Data Layer =====
 function loadData() {
+  // まずローカルキャッシュを即描画（ネット待ちで真っ白にしない）
+  const stored = localStorage.getItem(STORAGE_KEY);
+  data = stored ? JSON.parse(stored) : [];
   if (API_URL) {
-    syncFromCloud();
+    updateSyncStatus(data.length ? 'online' : 'syncing');
+    render();
+    // 裏でクラウドから最新を取得し、終わったら静かに差し替え
+    syncFromCloud({silent: true});
   } else {
-    const stored = localStorage.getItem(STORAGE_KEY);
-    data = stored ? JSON.parse(stored) : [];
     updateSyncStatus('offline');
     render();
   }
@@ -416,7 +420,7 @@ function saveLocal() {
 }
 
 async function syncFromCloud(opts = {}) {
-  // opts.silent: trueなら同期インジケータを表示せず、失敗時もローカルを上書きしない（バックグラウンド更新用）
+  // opts.silent: trueなら失敗時にローカルdataを上書きしない（バックグラウンド更新用）。成功時はステータスを更新する。
   // opts.skipRender: trueならrender()をスキップ（モーダル表示中の再描画抑制）
   const silent = !!opts.silent;
   const skipRender = !!opts.skipRender;
@@ -427,7 +431,7 @@ async function syncFromCloud(opts = {}) {
     if (json.success) {
       data = json.data || [];
       saveLocal();
-      if (!silent) updateSyncStatus('online');
+      updateSyncStatus('online');
     } else {
       throw new Error(json.error);
     }
@@ -438,7 +442,6 @@ async function syncFromCloud(opts = {}) {
       data = stored ? JSON.parse(stored) : [];
       updateSyncStatus('offline');
     }
-    // silentモードでは失敗してもローカルdataは触らない
     return false;
   }
   if (!skipRender) render();
@@ -604,19 +607,18 @@ function renderList() {
 }
 
 // ===== Modal =====
-async function openModal(id) {
+// モーダルを開いた瞬間のオリジナル値を保存（保存時に「ユーザーが触ったか」判定に使う）
+let modalOriginalSnapshot = null;
+
+function openModal(id) {
   const overlay = document.getElementById('modalOverlay');
   const title = document.getElementById('modalTitle');
   const btnDel = document.getElementById('btnDelete');
 
   if (id) {
-    // 既存データ編集時は、クラウドから最新を取り直してからフォームを埋める。
-    // これでローカルキャッシュが古い場合でも、最新のメモ・カウンセリング確定日がモーダルに表示される。
-    // モーダルを開いてから保存するまでの間に他端末で更新されても、ここで取得した最新データを上書きしないよう、
-    // 取得直後にフォームへ反映する。
-    if (API_URL) {
-      await syncFromCloud({skipRender: true});
-    }
+    // 即座にローカルキャッシュからフォームを埋める（待たない＝速い）。
+    // 開いた直後に裏で静かに同期し、最新データはsaveInquiry時にマージするので
+    // 別端末で同時編集されてもデータ消失しない。
     const item = data.find(d => d.id === id);
     if (!item) {
       alert('対象の問い合わせが見つかりませんでした。一覧を更新してください。');
@@ -639,7 +641,28 @@ async function openModal(id) {
     // 旧 status='result' のデータは、新ステータス（入会/未入会/検討中）に自動マップしてフォーム表示
     selectStatusByValue(effectiveStatus(item) || 'new');
     btnDel.style.display = 'block';
+    // 開いた瞬間の値を「未編集の基準」として記録。saveInquiry でこの値と現在値を比べ、
+    // ユーザーが触っていない項目はクラウド最新値を採用、触った項目はフォーム値で上書きする。
+    modalOriginalSnapshot = {
+      id: item.id,
+      name: item.name || '',
+      email: item.email || '',
+      phone: item.phone || '',
+      date: item.date || '',
+      service: item.service || 'NOIC',
+      source: item.source || 'form',
+      staff: item.staff || '',
+      counselingDate: item.counselingDate || '',
+      methodDate: item.methodDate || '',
+      memo: item.memo || '',
+      status: effectiveStatus(item) || 'new'
+    };
+    // モーダル表示後、裏で静かにクラウド再同期（次回の開閉に備える）。フォームは触らない。
+    if (API_URL) {
+      syncFromCloud({silent: true, skipRender: true});
+    }
   } else {
+    modalOriginalSnapshot = null;
     title.textContent = '新規問い合わせ';
     document.getElementById('editId').value = '';
     document.getElementById('fName').value = '';
@@ -689,19 +712,24 @@ function toggleResultGroup() {
   // 旧「入会状況」フィールドは status に統合されたため、表示制御は不要（hidden inputとして残置）
 }
 
-function saveInquiry() {
+async function saveInquiry() {
   const name = document.getElementById('fName').value.trim();
   if (!name) { alert('お名前を入力してください'); return; }
 
+  // 保存直前にクラウドから最新を取得（ユーザーが編集中の他端末更新を取り込むため）。
+  // 失敗してもsaveは続行する（ローカル+GAS側マージで防御）。
+  if (API_URL) {
+    updateSyncStatus('syncing');
+    await syncFromCloud({silent: true, skipRender: true});
+  }
+
   const id = document.getElementById('editId').value || genId();
-  const existing = data.find(d => d.id === id);
+  const cloudLatest = data.find(d => d.id === id) || {};
   const newStatus = getSelectedStatus();
-  // 入会/未入会/検討中ステータスのときは、後方互換のため result 列も同じ値で同期する
-  // それ以外のステータス（保留・対応中・予約済）は既存の result 値を維持（消さない）
-  const isResultStatus = (newStatus === 'joined' || newStatus === 'not_joined' || newStatus === 'considering');
-  const resultValue = isResultStatus ? newStatus : (existing && existing.result ? existing.result : '');
-  const item = {
-    id,
+  const snap = modalOriginalSnapshot;
+
+  // フォームの現在値
+  const formVals = {
     name,
     email: document.getElementById('fEmail').value.trim(),
     phone: document.getElementById('fPhone').value.trim(),
@@ -709,12 +737,45 @@ function saveInquiry() {
     service: document.getElementById('fService').value,
     source: document.getElementById('fSource').value,
     staff: document.getElementById('fStaff').value,
-    status: newStatus,
     counselingDate: document.getElementById('fCounselingDate').value,
     methodDate: document.getElementById('fMethodDate').value,
-    result: resultValue,
     memo: document.getElementById('fMemo').value.trim(),
-    createdAt: (existing && existing.createdAt) ? existing.createdAt : new Date().toISOString(),
+    status: newStatus
+  };
+
+  // 各項目について「ユーザーが触ったか」を判定。
+  // 触っていない（formVals[k] === snap[k]）→ クラウド最新値を採用（古い値で上書きしない）
+  // 触った → フォーム値を採用
+  // 新規（snap===null）→ 全部フォーム値を採用
+  const pick = k => {
+    if (!snap) return formVals[k];
+    const wasTouched = formVals[k] !== (snap[k] || '');
+    if (wasTouched) return formVals[k];
+    const c = cloudLatest[k];
+    return (c !== undefined && c !== null) ? c : formVals[k];
+  };
+
+  const finalStatus = pick('status');
+  // 入会/未入会/検討中ステータスのときは、後方互換のため result 列も同じ値で同期する
+  // それ以外（保留・対応中・予約済）は既存の result 値を維持（消さない）
+  const isResultStatus = (finalStatus === 'joined' || finalStatus === 'not_joined' || finalStatus === 'considering');
+  const resultValue = isResultStatus ? finalStatus : (cloudLatest.result || '');
+
+  const item = {
+    id,
+    name: pick('name'),
+    email: pick('email'),
+    phone: pick('phone'),
+    date: pick('date'),
+    service: pick('service'),
+    source: pick('source'),
+    staff: pick('staff'),
+    status: finalStatus,
+    counselingDate: pick('counselingDate'),
+    methodDate: pick('methodDate'),
+    result: resultValue,
+    memo: pick('memo'),
+    createdAt: cloudLatest.createdAt || (snap && snap.createdAt) || new Date().toISOString(),
     updatedAt: new Date().toISOString()
   };
 
@@ -727,6 +788,7 @@ function saveInquiry() {
 
   saveLocal();
   saveToCloud(item, 'save');
+  modalOriginalSnapshot = null;
   render();
   closeModal();
 }
