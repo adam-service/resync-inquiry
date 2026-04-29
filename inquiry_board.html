@@ -712,23 +712,15 @@ function toggleResultGroup() {
   // 旧「入会状況」フィールドは status に統合されたため、表示制御は不要（hidden inputとして残置）
 }
 
-async function saveInquiry() {
+function saveInquiry() {
   const name = document.getElementById('fName').value.trim();
   if (!name) { alert('お名前を入力してください'); return; }
 
-  // 保存直前にクラウドから最新を取得（ユーザーが編集中の他端末更新を取り込むため）。
-  // 失敗してもsaveは続行する（ローカル+GAS側マージで防御）。
-  if (API_URL) {
-    updateSyncStatus('syncing');
-    await syncFromCloud({silent: true, skipRender: true});
-  }
-
   const id = document.getElementById('editId').value || genId();
-  const cloudLatest = data.find(d => d.id === id) || {};
   const newStatus = getSelectedStatus();
   const snap = modalOriginalSnapshot;
 
-  // フォームの現在値
+  // フォームの現在値（保存ボタン押下時のスナップショット）
   const formVals = {
     name,
     email: document.getElementById('fEmail').value.trim(),
@@ -743,54 +735,83 @@ async function saveInquiry() {
     status: newStatus
   };
 
-  // 各項目について「ユーザーが触ったか」を判定。
-  // 触っていない（formVals[k] === snap[k]）→ クラウド最新値を採用（古い値で上書きしない）
-  // 触った → フォーム値を採用
-  // 新規（snap===null）→ 全部フォーム値を採用
-  const pick = k => {
-    if (!snap) return formVals[k];
-    const wasTouched = formVals[k] !== (snap[k] || '');
-    if (wasTouched) return formVals[k];
-    const c = cloudLatest[k];
-    return (c !== undefined && c !== null) ? c : formVals[k];
-  };
-
-  const finalStatus = pick('status');
-  // 入会/未入会/検討中ステータスのときは、後方互換のため result 列も同じ値で同期する
-  // それ以外（保留・対応中・予約済）は既存の result 値を維持（消さない）
-  const isResultStatus = (finalStatus === 'joined' || finalStatus === 'not_joined' || finalStatus === 'considering');
-  const resultValue = isResultStatus ? finalStatus : (cloudLatest.result || '');
-
-  const item = {
+  // === ① 楽観的更新 ===
+  // ローカル data を即座に更新してUIに反映、モーダルを即閉じる。
+  // クラウド同期・マージ・保存はあとでバックグラウンドで実行。
+  const localExisting = data.find(d => d.id === id) || {};
+  const isResultStatus = (newStatus === 'joined' || newStatus === 'not_joined' || newStatus === 'considering');
+  const optimisticItem = {
     id,
-    name: pick('name'),
-    email: pick('email'),
-    phone: pick('phone'),
-    date: pick('date'),
-    service: pick('service'),
-    source: pick('source'),
-    staff: pick('staff'),
-    status: finalStatus,
-    counselingDate: pick('counselingDate'),
-    methodDate: pick('methodDate'),
-    result: resultValue,
-    memo: pick('memo'),
-    createdAt: cloudLatest.createdAt || (snap && snap.createdAt) || new Date().toISOString(),
+    name: formVals.name,
+    email: formVals.email,
+    phone: formVals.phone,
+    date: formVals.date,
+    service: formVals.service,
+    source: formVals.source,
+    staff: formVals.staff,
+    status: newStatus,
+    counselingDate: formVals.counselingDate,
+    methodDate: formVals.methodDate,
+    result: isResultStatus ? newStatus : (localExisting.result || ''),
+    memo: formVals.memo,
+    createdAt: localExisting.createdAt || (snap && snap.createdAt) || new Date().toISOString(),
     updatedAt: new Date().toISOString()
   };
-
   const idx = data.findIndex(d => d.id === id);
-  if (idx >= 0) {
-    data[idx] = item;
-  } else {
-    data.push(item);
-  }
-
+  if (idx >= 0) data[idx] = optimisticItem;
+  else data.push(optimisticItem);
   saveLocal();
-  saveToCloud(item, 'save');
   modalOriginalSnapshot = null;
   render();
   closeModal();
+
+  // === ② バックグラウンド: 最新クラウドとマージしてから保存 ===
+  // ユーザーが触っていないフィールドはクラウド最新値を採用、触ったフィールドはフォーム値を採用。
+  // これで他端末で別フィールドが更新されていても消失しない。
+  (async () => {
+    try {
+      if (API_URL) {
+        await syncFromCloud({silent: true, skipRender: true});
+      }
+      const cloudLatest = data.find(d => d.id === id) || {};
+      const pick = k => {
+        if (!snap) return formVals[k];
+        const wasTouched = formVals[k] !== (snap[k] || '');
+        if (wasTouched) return formVals[k];
+        const c = cloudLatest[k];
+        return (c !== undefined && c !== null && c !== '') ? c : formVals[k];
+      };
+      const finalStatus = pick('status');
+      const isResult = (finalStatus === 'joined' || finalStatus === 'not_joined' || finalStatus === 'considering');
+      const finalItem = {
+        id,
+        name: pick('name'),
+        email: pick('email'),
+        phone: pick('phone'),
+        date: pick('date'),
+        service: pick('service'),
+        source: pick('source'),
+        staff: pick('staff'),
+        status: finalStatus,
+        counselingDate: pick('counselingDate'),
+        methodDate: pick('methodDate'),
+        result: isResult ? finalStatus : (cloudLatest.result || ''),
+        memo: pick('memo'),
+        createdAt: cloudLatest.createdAt || optimisticItem.createdAt,
+        updatedAt: new Date().toISOString()
+      };
+      const idx2 = data.findIndex(d => d.id === id);
+      if (idx2 >= 0) data[idx2] = finalItem;
+      else data.push(finalItem);
+      saveLocal();
+      saveToCloud(finalItem, 'save');
+      render();
+    } catch (e) {
+      console.error('Background save error:', e);
+      // エラー時もローカル楽観更新は維持。saveToCloud再試行のため最低限の保存だけ実行。
+      saveToCloud(optimisticItem, 'save');
+    }
+  })();
 }
 
 function deleteInquiry() {
